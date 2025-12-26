@@ -1,0 +1,183 @@
+format_version: "11"
+default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
+project_type: other
+
+app:
+  envs:
+    # Populate these in Bitrise Secrets for secure CI usage
+    - EXPO_TOKEN: "7Vds7IGBCRRXMHRq5FzXj4rP7x2BCpV2gSWs2oot"
+    - PACKAGE_NAME: "demo.expo.bitrise.eas"
+    # App Store Connect API key (recommended for CI automations)
+    - APP_STORE_CONNECT_API_KEY: "__SET_IN_BITRISE_SECRETS__"
+    - APP_STORE_CONNECT_API_KEY_ID: "__SET_IN_BITRISE_SECRETS__"
+    - APP_STORE_CONNECT_ISSUER_ID: "__SET_IN_BITRISE_SECRETS__"
+    # Legacy Apple ID based (only if you must, otherwise prefer API key)
+    - APPLE_ID: "__SET_IN_BITRISE_SECRETS__"
+    - ASC_APP_ID: "YOUR_ASC_APP_ID"
+    - APPLE_TEAM_ID: "YOUR_TEAM_ID"
+
+workflows:
+  staging:
+    description: |
+      Staging workflow for React Native (Expo EAS). Builds Android (APK) and iOS (device build), then submits to Internal Testing / TestFlight.
+      Uses EAS profile "preview" and channel "staging" per eas.json.
+    envs:
+      - EAS_PROFILE: "preview"
+      - EAS_CHANNEL: "staging"
+    steps:
+      - git-clone@6: {}
+      - cache-pull@3: {}
+
+      # Install dependencies
+      - npm@1:
+          inputs:
+            - command: "ci"
+
+      # Install EAS CLI
+      - script@1:
+          title: Install EAS CLI
+          inputs:
+            - content: |
+                #!/usr/bin/env bash
+                set -euxo pipefail
+                npm i -g eas-cli
+
+      # Run tests (adjust to your test runner)
+      - script@1:
+          title: Run tests
+          inputs:
+            - content: |
+                #!/usr/bin/env bash
+                set -euxo pipefail
+                npm test
+
+      # EAS Build - Android (APK per preview profile)
+      - script@1:
+          title: EAS build Android (preview)
+          inputs:
+            - content: |
+                #!/usr/bin/env bash
+                set -euxo pipefail
+                export EXPO_TOKEN="${EXPO_TOKEN}"
+                eas build --non-interactive --profile "${EAS_PROFILE}" --platform android --wait
+
+      # EAS Build - iOS (device build, simulator=false in preview)
+      - script@1:
+          title: EAS build iOS (preview)
+          inputs:
+            - content: |
+                #!/usr/bin/env bash
+                set -euxo pipefail
+                export EXPO_TOKEN="${EXPO_TOKEN}"
+                eas build --non-interactive --profile "${EAS_PROFILE}" --platform ios --wait
+
+      # Submit builds to stores (uses latest finished builds)
+      - script@1:
+          title: EAS submit Android (Internal Testing)
+          inputs:
+            - content: |
+                #!/usr/bin/env bash
+                set -euxo pipefail
+                export EXPO_TOKEN="${EXPO_TOKEN}"
+                # Submit the latest successful Android build to Internal Testing
+                eas submit -p android --non-interactive --latest
+
+      - script@1:
+          title: EAS submit iOS (TestFlight)
+          inputs:
+            - content: |
+                #!/usr/bin/env bash
+                set -euxo pipefail
+                export EXPO_TOKEN="${EXPO_TOKEN}"
+                # Submit the latest successful iOS build to TestFlight
+                eas submit -p ios --non-interactive --latest
+
+      - cache-push@3: {}
+
+  production:
+    description: |
+      Production workflow for React Native (Expo EAS). Builds Android (AAB) and iOS, then submits to Production/App Store.
+      Includes a Manual Approval gate before submissions. Uses EAS profile "production".
+    envs:
+      - EAS_PROFILE: "production"
+      - EAS_CHANNEL: "production"
+    steps:
+      - git-clone@6: {}
+      - cache-pull@3: {}
+
+      # Install dependencies
+      - npm@1:
+          inputs:
+            - command: "ci"
+
+      # Install EAS CLI
+      - script@1:
+          title: Install EAS CLI
+          inputs:
+            - content: |
+                #!/usr/bin/env bash
+                set -euxo pipefail
+                npm i -g eas-cli
+
+      # Run tests (adjust to your test runner)
+      - script@1:
+          title: Run tests
+          inputs:
+            - content: |
+                #!/usr/bin/env bash
+                set -euxo pipefail
+                npm test
+
+      # EAS Build - Android (AAB per production profile)
+      - script@1:
+          title: EAS build Android (production)
+          inputs:
+            - content: |
+                #!/usr/bin/env bash
+                set -euxo pipefail
+                export EXPO_TOKEN="${EXPO_TOKEN}"
+                eas build --non-interactive --profile "${EAS_PROFILE}" --platform android --wait
+
+      # EAS Build - iOS (resourceClass large per production profile)
+      - script@1:
+          title: EAS build iOS (production)
+          inputs:
+            - content: |
+                #!/usr/bin/env bash
+                set -euxo pipefail
+                export EXPO_TOKEN="${EXPO_TOKEN}"
+                eas build --non-interactive --profile "${EAS_PROFILE}" --platform ios --wait
+
+      # Manual approval gate before store submissions
+      - manual-approval@1:
+          inputs:
+            - message: "Approve to proceed with App Store and Play Production submissions."
+
+      # Submit builds to stores (uses latest finished builds)
+      - script@1:
+          title: EAS submit Android (Production)
+          inputs:
+            - content: |
+                #!/usr/bin/env bash
+                set -euxo pipefail
+                export EXPO_TOKEN="${EXPO_TOKEN}"
+                # Submit the latest successful Android build to Production
+                eas submit -p android --non-interactive --latest
+
+      - script@1:
+          title: EAS submit iOS (App Store)
+          inputs:
+            - content: |
+                #!/usr/bin/env bash
+                set -euxo pipefail
+                export EXPO_TOKEN="${EXPO_TOKEN}"
+                # Submit the latest successful iOS build to App Store
+                eas submit -p ios --non-interactive --latest
+
+      - cache-push@3: {}
+
+trigger_map:
+  - push_branch: staging
+    workflow: staging
+  - push_branch: production
+    workflow: production
