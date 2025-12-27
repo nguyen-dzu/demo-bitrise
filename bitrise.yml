@@ -17,6 +17,65 @@ app:
     - APPLE_TEAM_ID: "YOUR_TEAM_ID"
 
 workflows:
+  android-apk:
+    description: |
+      Android-only workflow that builds an APK via Expo EAS using the preview profile,
+      then downloads and publishes the artifact to Bitrise.
+    envs:
+      - EAS_PROFILE: "preview"
+      - EAS_CHANNEL: "staging"
+    steps:
+      - git-clone@6: {}
+
+      # Install dependencies
+      - npm@1:
+          inputs:
+            - command: "ci"
+
+      # Install EAS CLI
+      - script@1:
+          title: Install EAS CLI
+          inputs:
+            - content: |
+                #!/usr/bin/env bash
+                set -euxo pipefail
+                npm i -g eas-cli
+
+      # Optional: run tests (disable if you prefer faster builds)
+      # (Skipped: no test script defined)
+
+      # EAS Build - Android (APK per preview profile)
+      - script@1:
+          title: EAS build Android (APK)
+          inputs:
+            - content: |
+                #!/usr/bin/env bash
+                set -euxo pipefail
+                export EXPO_TOKEN="${EXPO_TOKEN}"
+                eas build --non-interactive --profile "${EAS_PROFILE}" --platform android --wait
+
+      # Download latest Android build artifact and publish to Bitrise
+      - script@1:
+          title: Download Android APK artifact
+          inputs:
+            - content: |
+                #!/usr/bin/env bash
+                set -euxo pipefail
+                export EXPO_TOKEN="${EXPO_TOKEN}"
+                mkdir -p "$BITRISE_DEPLOY_DIR"
+                # Download the latest finished Android artifact to current dir
+                eas build:download -p android --latest
+                # Move the first found APK to Bitrise deploy dir
+                APK_PATH=$(find . -maxdepth 1 -type f -name "*.apk" -print -quit || true)
+                if [[ -n "$APK_PATH" ]]; then
+                  cp "$APK_PATH" "$BITRISE_DEPLOY_DIR/"
+                else
+                  echo "No APK artifact found in current directory after download." >&2
+                  exit 1
+                fi
+
+      - deploy-to-bitrise-io@2: {}
+
   staging:
     description: |
       Staging workflow for React Native (Expo EAS). Builds Android (APK) and iOS (device build), then submits to Internal Testing / TestFlight.
@@ -32,6 +91,32 @@ workflows:
       - npm@1:
           inputs:
             - command: "ci"
+
+      # Quality Gate (Fail-Fast): run tests; skip if no test script
+      - script@1:
+          title: Quality Gate - run unit tests
+          inputs:
+            - content: |
+                #!/usr/bin/env bash
+                set -e
+                echo "Running Unit Tests..."
+                if command -v yarn >/dev/null 2>&1; then
+                  if grep -q '"test"' package.json; then
+                    yarn test --ci --reporters=default
+                  else
+                    echo "No test script found in package.json; skipping quality gate."
+                  fi
+                else
+                  if grep -q '"test"' package.json; then
+                    npm test --ci -- --reporters=default
+                  else
+                    echo "No test script found in package.json; skipping quality gate."
+                  fi
+                fi
+
+      # Ensure Android SDK/tools are present on CI-only
+      - install-missing-android-tools@2:
+          run_if: ".IsCI"
 
       # Install EAS CLI
       - script@1:
@@ -109,6 +194,32 @@ workflows:
       - npm@1:
           inputs:
             - command: "ci"
+
+      # Quality Gate (Fail-Fast): run tests; skip if no test script
+      - script@1:
+          title: Quality Gate - run unit tests
+          inputs:
+            - content: |
+                #!/usr/bin/env bash
+                set -e
+                echo "Running Unit Tests..."
+                if command -v yarn >/dev/null 2>&1; then
+                  if grep -q '"test"' package.json; then
+                    yarn test --ci --reporters=default
+                  else
+                    echo "No test script found in package.json; skipping quality gate."
+                  fi
+                else
+                  if grep -q '"test"' package.json; then
+                    npm test --ci -- --reporters=default
+                  else
+                    echo "No test script found in package.json; skipping quality gate."
+                  fi
+                fi
+
+      # Ensure Android SDK/tools are present on CI-only
+      - install-missing-android-tools@2:
+          run_if: ".IsCI"
 
       # Install EAS CLI
       - script@1:

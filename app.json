@@ -9,9 +9,11 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "demo.expo.bitrise.eas"
     },
     "android": {
+      "package": "demo.expo.bitrise.eas",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -49,6 +51,12 @@
       "eas": {
         "projectId": "506a04b3-13f3-4106-870d-f1a1e0bebd01"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/506a04b3-13f3-4106-870d-f1a1e0bebd01"
     }
   }
 }

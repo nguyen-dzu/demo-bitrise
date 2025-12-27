@@ -9,11 +9,13 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      }
+      },
+      "channel": "development"
     },
     "preview": {
       "distribution": "internal",
       "channel": "staging",
+      "credentialsSource": "remote",
       "android": {
         "buildType": "apk"
       },
@@ -24,6 +26,7 @@
     "production": {
       "channel": "production",
       "autoIncrement": true,
+      "credentialsSource": "remote",
       "android": {
         "buildType": "app-bundle"
       },
